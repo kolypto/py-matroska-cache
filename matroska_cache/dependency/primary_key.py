@@ -1,4 +1,4 @@
-from typing import Tuple, Any, overload
+from typing import Tuple, Any
 
 from sqlalchemy.orm.base import instance_state
 from sqlalchemy.orm.state import InstanceState

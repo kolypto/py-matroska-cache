@@ -2,4 +2,8 @@
 
 from .id import Id
 from .tag import Tag
-from .primary_key import PrimaryKey, RawPrimaryKey
+
+try:
+    from .primary_key import PrimaryKey, RawPrimaryKey
+except ImportError as e:
+    pass
