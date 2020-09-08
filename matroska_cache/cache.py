@@ -68,14 +68,28 @@ class MatroskaCache:
         return self.backend.get(key)
 
     def has(self, key: str) -> bool:
-        """ Check if there  """
+        """ Check if cache key `key` is available """
         return self.backend.has(key)
 
     def put(self, key: str, data: Any, *dependencies: DependencyBase, expires: int):
+        """ Store data into the cache under key `key`
+
+        Args:
+            key: The cache key
+            data: The data to store. It has to be json-serializable.
+            *dependencies: List of dependencies for this cache entry. See `matroska_cache.dep`.
+            expires: The number of seconds to keep this cache entry for
+        """
         return self.backend.put(key, data, expires=expires, dependencies=dependencies)
 
     def delete(self, key: str):
+        """ Delete a cache key """
         self.backend.delete(key)
 
     def invalidate(self, *dependencies: DependencyBase):
+        """ Invalidate all cache entries that depend on `dependencies`
+
+        Args:
+            *dependencies: List of dependencies to invalidate cache records for
+        """
         return self.backend.invalidate(dependencies)

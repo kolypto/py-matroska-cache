@@ -1,5 +1,5 @@
 import dataclasses
-from typing import List, Mapping, MutableMapping
+from typing import MutableMapping
 
 import pytest
 import sqlalchemy as sa
@@ -118,6 +118,13 @@ def test_collection_dependencies(redis: FakeRedis):
     """ Test dynamic dependencies """
     cache = MatroskaCache(backend=RedisBackend(redis, prefix='cache'))
 
+    book_scopes = dep.Scopes('book', production_mode=False)
+
+    @book_scopes.describes('category')
+    def book_category(book: dict):
+        return {'category': book['category']}
+
+
     def main():
         # Test that cache is invalidated when:
         # * a sci-fi book is added
@@ -155,7 +162,6 @@ def test_collection_dependencies(redis: FakeRedis):
         assert list_scifi_books() == (True, expected_scifi)  # cache was NOT invalidated when other books were modified
 
 
-
     # Some imaginary books database
     books_db: MutableMapping[str, dict] = {}
 
@@ -180,8 +186,10 @@ def test_collection_dependencies(redis: FakeRedis):
             cache.put(f'books-{category}', books,
                       # Every book is a dependency by id
                       *[dep.Id('book', book['id']) for book in books],
-                      # The list of books is itself a dependency
-                      dep.Tag(f'books:category={category}'),
+                      # The filtered list of books is itself a dependency.
+                      # This condition() references a scope described using `@book_scopes.describes()`
+                      # The resulting dependency is automatically invalidated using `book_scopes.object(book)`
+                      *book_scopes.condition(category=category),
                       expires=600,
                       )
             return False, books
@@ -198,7 +206,8 @@ def test_collection_dependencies(redis: FakeRedis):
         books_db[id] = book
 
         # 🪆 Invalidate caches: new book was added; invalidate lists
-        cache.invalidate(dep.Tag(f'books:category={book["category"]}'))
+        # Generate dependencies that will invalidate some `book_scopes.condition(...)`
+        book_scopes.invalidate_for(book, cache)
 
         # Done
         return book
