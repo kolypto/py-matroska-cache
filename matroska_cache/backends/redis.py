@@ -4,8 +4,8 @@ from typing import Any, Iterable, List
 
 from redis import Redis
 
+from matroska_cache.dependency.base import DependencyBase
 from .base import MatroskaCacheBackendBase
-from ..dependency.base import DependencyBase
 
 
 class RedisBackend(MatroskaCacheBackendBase):
@@ -31,6 +31,9 @@ class RedisBackend(MatroskaCacheBackendBase):
     def has(self, key: str) -> bool:
         return self.redis.exists(self._key('data', key)) == 1
 
+    def delete(self, key: str):
+        self.redis.delete(self._key('data', key))
+
     def put(self, key: str, data: Any, dependencies: Iterable[DependencyBase], expires: int):
         # Store the dependency information
         self._remember_dependencies_for(key, dependencies, expires)
@@ -39,6 +42,9 @@ class RedisBackend(MatroskaCacheBackendBase):
         self.redis.setex(self._key('data', key), expires, serialize(data))
 
     def invalidate(self, dependencies: Iterable[DependencyBase]):
+        if not dependencies:
+            return
+
         # Get the list of keys that depend on `dependency` (every single one of them)
         # This is resolved through the `rdep` key
         rdep_keys = [self._key('rdep', dependency.key())
@@ -65,6 +71,8 @@ class RedisBackend(MatroskaCacheBackendBase):
         """
         # Dependencies as a string
         deps = [dependency.key() for dependency in dependencies]
+        if not deps:
+            return
 
         # Use a pipeline to speed up
         p = self.redis.pipeline()

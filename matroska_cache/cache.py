@@ -74,5 +74,8 @@ class MatroskaCache:
     def put(self, key: str, data: Any, *dependencies: DependencyBase, expires: int):
         return self.backend.put(key, data, expires=expires, dependencies=dependencies)
 
+    def delete(self, key: str):
+        self.backend.delete(key)
+
     def invalidate(self, *dependencies: DependencyBase):
         return self.backend.invalidate(dependencies)

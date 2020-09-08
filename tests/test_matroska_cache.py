@@ -40,6 +40,12 @@ def test_cache_plain_dependencies(redis: FakeRedis):
     with pytest.raises(KeyError):
         cache.get('articles-list')
 
+    # Test delete()
+    cache.put('test', 1, expires=10)
+    assert cache.has('test')
+    cache.delete('test')
+    assert not cache.has('test')
+
 
 def test_cache_sa_dependencies(redis: FakeRedis):
     """ Test sa_dependencies() """
