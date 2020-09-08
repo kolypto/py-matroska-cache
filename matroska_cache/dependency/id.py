@@ -1,7 +1,6 @@
-from dataclasses import dataclass
 from typing import Union
 
-from .base import DependencyBase
+from .base import DependencyBase, dataclass
 
 
 @dataclass

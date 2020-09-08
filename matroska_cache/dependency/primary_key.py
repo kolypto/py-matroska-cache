@@ -3,9 +3,10 @@ from typing import Tuple, Any
 from sqlalchemy.orm.base import instance_state
 from sqlalchemy.orm.state import InstanceState
 
-from .id import Id
+from .id import Id, dataclass
 
 
+@dataclass()
 class PrimaryKey(Id):
     """ Dependency on a primary key of an instance
 
@@ -46,6 +47,7 @@ class PrimaryKey(Id):
             return repr(identity)
 
 
+@dataclass()
 class RawPrimaryKey(Id):
     """ A primary key dependency that you will have to construct manually ;) """
     PREFIX = 'pk'
