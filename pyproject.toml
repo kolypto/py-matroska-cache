@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "matroska_cache"
+name = "matroska-cache"
 version = "0.1.0"
 description = "Caching with dependency tracking"
 authors = ["Mark Vartanyan <kolypto@gmail.com>"]
