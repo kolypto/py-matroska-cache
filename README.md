@@ -4,7 +4,7 @@
 Matroska Cache: Cache with dependency tracking
 ==============================================
 
-["Matroska"](https://en.wikipedia.org/wiki/Matryoshka_doll), aka Russian Doll, 
+["Matroska"](https://en.wikipedia.org/wiki/Matryoshka_doll), aka Russian Doll 🪆, 
 is a nesting doll where one is placed inside another.
 
 In Python, Matroska is a cache with nested objects that knows when they change.

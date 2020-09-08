@@ -1,4 +1,5 @@
 import dataclasses
+from typing import List, Mapping, MutableMapping
 
 import pytest
 import sqlalchemy as sa
@@ -111,3 +112,104 @@ def test_cache_sa_dependencies(redis: FakeRedis):
 
     # main
     main()
+
+
+def test_collection_dependencies(redis: FakeRedis):
+    """ Test dynamic dependencies """
+    cache = MatroskaCache(backend=RedisBackend(redis, prefix='cache'))
+
+    def main():
+        # Test that cache is invalidated when:
+        # * a sci-fi book is added
+        # * a sci-fi book is modified
+        # Test that cache is NOT invalidated when:
+        # * any other book is added or modified
+
+        # Known sci-fi books
+        expected_scifi = []
+
+        # First list(): empty list
+        assert list_scifi_books() == (False, expected_scifi)  # no cached value
+        assert list_scifi_books() == (True, expected_scifi)  # cache hit
+
+        # Add a book.
+        add_other_book(category='fantasy')
+        assert list_scifi_books() == (True, expected_scifi)  # cache is still hit: this category is not cached
+
+        # Add a Sci-Fi book
+        add_scifi_book()
+        expected_book = {'id': 2, 'category': 'sci-fi'}
+        expected_scifi.append(expected_book)
+        assert list_scifi_books() == (False, expected_scifi)  # cache was invalidated by a new book
+        assert list_scifi_books() == (True, expected_scifi)
+
+        # Modify a sci-fi book
+        modify_book(2, title='Caching is Easy')
+        expected_book['title'] = 'Caching is Easy'
+        assert list_scifi_books() == (False, expected_scifi)  # cache was invalidated by a modified book
+        assert list_scifi_books() == (True, expected_scifi)
+
+        # Modify another book
+        add_other_book(category='tutorials')
+        modify_book(3, title='Easy Gardening')
+        assert list_scifi_books() == (True, expected_scifi)  # cache was NOT invalidated when other books were modified
+
+
+
+    # Some imaginary books database
+    books_db: MutableMapping[str, dict] = {}
+
+    def list_scifi_books(category='sci-fi'):
+        return list_books(category)
+
+    def list_books(category: str):
+        """ List books from a category
+
+        Returns:
+            (cache-hit, result)
+        """
+        # Attempt to get from cache
+        try:
+            return True, cache.get('books-sci-fi')
+        except KeyError:
+            # Query the database
+            books = [book for book in books_db.values()
+                     if book['category'] == category]
+
+            # 🪆 Cache, return
+            cache.put(f'books-{category}', books,
+                      # Every book is a dependency by id
+                      *[dep.Id('book', book['id']) for book in books],
+                      # The list of books is itself a dependency
+                      dep.Tag(f'books:category={category}'),
+                      expires=600,
+                      )
+            return False, books
+
+    def add_scifi_book(*, category='sci-fi', **fields):
+        return add_book({'category': category, **fields})
+
+    def add_other_book(*, category: str, **fields):
+        return add_book({'category': category, **fields})
+
+    def add_book(book: dict):
+        # Save the book
+        id = book['id'] = len(books_db) + 1  # auto-increment
+        books_db[id] = book
+
+        # 🪆 Invalidate caches: new book was added; invalidate lists
+        cache.invalidate(dep.Tag(f'books:category={book["category"]}'))
+
+        # Done
+        return book
+
+    def modify_book(id: int, **fields):
+        # Save the book
+        book = books_db[id]
+        book.update(fields)
+
+        # 🪆 Invalidate caches: modified book
+        cache.invalidate(dep.Id('book', id))
+
+    main()
+
