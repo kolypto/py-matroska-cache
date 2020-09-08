@@ -8,7 +8,7 @@ from ..dependency.base import DependencyBase
 
 
 class RedisBackend(MatroskaCacheBackendBase):
-    def __init__(self, redis: Redis, prefix: str):
+    def __init__(self, redis: Redis, *, prefix: str):
         """ Init the Redis backend for the matroska cache
 
         Args:

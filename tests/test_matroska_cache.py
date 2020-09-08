@@ -13,7 +13,7 @@ from .lib import sa_set_committed_state
 
 def test_cache_plain_dependencies(redis: FakeRedis):
     """ Test Matroska cache with plain dependencies """
-    cache = MatroskaCache(backend=RedisBackend(redis, 'cache'))
+    cache = MatroskaCache(backend=RedisBackend(redis, prefix='cache'))
 
     # Test: cache a simple object
     data = [{'id': 1}, {'id': 2}]
@@ -44,7 +44,7 @@ def test_cache_plain_dependencies(redis: FakeRedis):
 def test_cache_sa_dependencies(redis: FakeRedis):
     """ Test sa_dependencies() """
     def main():
-        cache = MatroskaCache(backend=RedisBackend(redis, 'cache'))
+        cache = MatroskaCache(backend=RedisBackend(redis, prefix='cache'))
 
         # Prepare data
         author = sa_set_committed_state(User(), id=1)
