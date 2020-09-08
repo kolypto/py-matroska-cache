@@ -1,3 +1,4 @@
+import itertools
 import json
 from typing import Any, Iterable, List
 
@@ -37,13 +38,18 @@ class RedisBackend(MatroskaCacheBackendBase):
         # Store the data
         self.redis.setex(self._key('data', key), expires, serialize(data))
 
-    def invalidate(self, dependency: DependencyBase):
-        # Get the list of keys that depend on `dependency`
+    def invalidate(self, dependencies: Iterable[DependencyBase]):
+        # Get the list of keys that depend on `dependency` (every single one of them)
         # This is resolved through the `rdep` key
-        rdep_key = self._key('rdep', dependency.key())
-        data_keys = self.redis.smembers(rdep_key)
+        rdep_keys = [self._key('rdep', dependency.key())
+                     for dependency in dependencies]
+        p = self.redis.pipeline()
+        for rdep_key in rdep_keys:
+            p.smembers(rdep_key)
+        data_keys = list(itertools.chain(*p.execute()))
 
-        # Invalidate every data key that depends on this one
+        # Invalidate every data key that depend on these rdep_keys
+        # This means deleting them
         if data_keys:  # do nothing if there is nothing to do
             self.redis.delete(*(self._key('data', key) for key in data_keys))
 

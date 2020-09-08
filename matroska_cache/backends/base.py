@@ -67,5 +67,5 @@ class MatroskaCacheBackendBase(ABC):
         """ See whether the cache has `key` stored in it """
 
     @abstractmethod
-    def invalidate(self, dependency: DependencyBase):
+    def invalidate(self, dependencies: Iterable[DependencyBase]):
         """ Invalidate all cache records with `dependency` as their dependency """
