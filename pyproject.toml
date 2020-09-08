@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "matroska_cache"
+version = "0.1.0"
+description = "Caching with dependency tracking"
+authors = ["Mark Vartanyan <kolypto@gmail.com>"]
+repository = 'https://github.com/kolypto/py-matroska_cache'
+
+[tool.poetry.dependencies]
+python = "^3.7"
+redis = {version = "^3.5", optional = true}
+sqlalchemy = {version = "^1.3", optional = true}
+
+[tool.poetry.dev-dependencies]
+nox = "^2020.8.22"
+pytest = "^6.0.1"
+pytest-cov = "^2.10.1"
+sqlalchemy = "^1.3.19"
+fakeredis = "^1.4.3"
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests/",
+]
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
+
