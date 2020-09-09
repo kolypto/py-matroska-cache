@@ -2,6 +2,7 @@ __version__ = __import__('pkg_resources').get_distribution('matroska_cache').ver
 
 
 from .cache import MatroskaCache
+from .exc import NotInCache
 from . import dependency as dep
 
 try:

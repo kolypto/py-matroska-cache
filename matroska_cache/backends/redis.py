@@ -4,8 +4,7 @@ from typing import Any, Iterable, List
 
 from redis import Redis
 
-from matroska_cache.dependency.base import DependencyBase
-from .base import MatroskaCacheBackendBase
+from .base import MatroskaCacheBackendBase, DependencyBase, NotInCache
 
 
 class RedisBackend(MatroskaCacheBackendBase):
@@ -23,7 +22,7 @@ class RedisBackend(MatroskaCacheBackendBase):
         # Get the data; fail if the key does not exist
         data = self.redis.get(self._key('data', key))
         if data is None:
-            raise KeyError(key)
+            raise NotInCache(key)
 
         # Unserialize
         return unserialize(data)

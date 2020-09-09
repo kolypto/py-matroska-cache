@@ -34,7 +34,8 @@ Example invalidate:
 from abc import ABC, abstractmethod
 from typing import Any, Iterable
 
-from ..dependency.base import DependencyBase
+from matroska_cache.dependency.base import DependencyBase
+from matroska_cache.exc import NotInCache  # noqa
 
 
 class MatroskaCacheBackendBase(ABC):
@@ -59,7 +60,7 @@ class MatroskaCacheBackendBase(ABC):
         Returns:
             cached data
         Raises:
-            KeyError: no data found
+            NotInCache: no data found
         """
 
     @abstractmethod

@@ -51,6 +51,7 @@ from typing import Any
 
 from .backends.base import MatroskaCacheBackendBase
 from .dependency.base import DependencyBase
+from .exc import NotInCache  # noqa
 
 
 class MatroskaCache:
@@ -63,7 +64,7 @@ class MatroskaCache:
         Args:
             key: The cache key
         Raises:
-            KeyError: no data cached by that key
+            NotInCache: no data cached by that key
         """
         return self.backend.get(key)
 

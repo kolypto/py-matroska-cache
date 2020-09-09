@@ -6,7 +6,7 @@ import sqlalchemy as sa
 import sqlalchemy.ext.declarative
 from fakeredis import FakeRedis
 
-from matroska_cache import MatroskaCache, dep
+from matroska_cache import MatroskaCache, dep, NotInCache
 from matroska_cache import sa_dependencies
 from matroska_cache.backends.redis import RedisBackend
 from .lib import sa_set_committed_state
@@ -38,7 +38,7 @@ def test_cache_plain_dependencies(redis: FakeRedis):
 
     # No data anymore
     assert not cache.has('articles-list')
-    with pytest.raises(KeyError):
+    with pytest.raises(NotInCache):
         cache.get('articles-list')
 
     # Test delete()
@@ -177,7 +177,7 @@ def test_collection_dependencies(redis: FakeRedis):
         # Attempt to get from cache
         try:
             return True, cache.get('books-sci-fi')
-        except KeyError:
+        except NotInCache:
             # Query the database
             books = [book for book in books_db.values()
                      if book['category'] == category]
