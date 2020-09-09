@@ -76,9 +76,10 @@ class RedisBackend(MatroskaCacheBackendBase):
         # Use a pipeline to speed up
         p = self.redis.pipeline()
 
-        # Forward dependency information: `data` depends on `dep`
-        fdep_key = self._key('fdep', key)
-        p.sadd(fdep_key, *deps)
+        # # Forward dependency information: `data` depends on `dep`
+        # NOTE: this information might only be useful for debugging
+        # fdep_key = self._key('fdep', key)
+        # p.sadd(fdep_key, *deps)
 
         # Reverse dependency information: `dep` is a dependency of `data`
         rdep_keys = []
@@ -91,7 +92,7 @@ class RedisBackend(MatroskaCacheBackendBase):
         p.execute()
 
         # Get the current TTLs for dependency keys
-        dep_keys = [fdep_key, *rdep_keys]
+        dep_keys = rdep_keys  #[fdep_key, *rdep_keys]
         for key in dep_keys:
             p.ttl(key)
         dep_keys_ttls: List[int] = p.execute()
