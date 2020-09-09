@@ -6,6 +6,6 @@ from .ntag import NTag
 from .scopes import Scopes
 
 try:
-    from .primary_key import PrimaryKey, RawPrimaryKey
+    from .primary_key import PrimaryKey
 except ImportError as e:
     pass

@@ -1,4 +1,4 @@
-from typing import Tuple, Any
+from typing import Tuple, Any, Union
 
 from sqlalchemy.orm.base import instance_state
 from sqlalchemy.orm.state import InstanceState
@@ -21,8 +21,8 @@ class PrimaryKey(Id):
                 Article(id=2).asdict(),
             ],
             dependencies=[
-                Id('article', 1),
-                Id('article', 2),
+                PrimaryKey(Article, 1),
+                PrimaryKey(Article, 2),
             ]
         )
 
@@ -33,21 +33,24 @@ class PrimaryKey(Id):
 
     PREFIX = 'pk'
 
-    def __init__(self, instance: object):
+    def __init__(self, model: Union[str, type], identity: Union[str, int]):
+        if isinstance(model, type):
+            model = model.__name__
+        super().__init__(model, identity)
+
+    @classmethod
+    def from_instance(cls, instance: object):
         state: InstanceState = instance_state(instance)
-        super().__init__(
-            type=state.class_.__name__,
-            id=self._instance_identity_to_str(state.identity)
+        return cls(
+            state.class_.__name__,
+            cls._instance_identity_to_str(state.identity)
         )
 
-    def _instance_identity_to_str(self, identity: Tuple[Any]) -> str:
+    @classmethod
+    def _instance_identity_to_str(cls, identity: Tuple[Any]) -> str:
+        # For models with singular primary key, just stringify it
         if len(identity) == 1:
             return str(identity[0])
+        # For models with composite primary key, repr() its tuple
         else:
             return repr(identity)
-
-
-@dataclass()
-class RawPrimaryKey(Id):
-    """ A primary key dependency that you will have to construct manually ;) """
-    PREFIX = 'pk'

@@ -89,7 +89,7 @@ def test_cache_sa_dependencies(redis: FakeRedis):
         assert value == data
 
         # Invalidate
-        cache.invalidate(dep.RawPrimaryKey('User', 1))
+        cache.invalidate(dep.PrimaryKey('User', 1))
         assert not cache.has('articles-list')
 
     # Sample models

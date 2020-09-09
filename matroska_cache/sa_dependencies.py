@@ -42,7 +42,7 @@ def sa_dependencies(instance: Union[SAInstanceT, Iterable[SAInstanceT]], map: Pl
     # Include self
     ret = []
     if instance not in _seen:
-        ret.append(PrimaryKey(instance))
+        ret.append(PrimaryKey.from_instance(instance))
     _seen.add(instance)
 
     # If there's anything left to iterate, do it
