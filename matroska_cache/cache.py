@@ -46,8 +46,8 @@ Example:
 
     cache.put('articles-list', jsonify(data), *dependencies, expires=60)
 """
-
-from typing import Any
+from datetime import timedelta
+from typing import Any, Union
 
 from .backends.base import MatroskaCacheBackendBase
 from .dep.base import DependencyBase
@@ -72,15 +72,17 @@ class MatroskaCache:
         """ Check if cache key `key` is available """
         return self.backend.has(key)
 
-    def put(self, key: str, data: Any, *dependencies: DependencyBase, expires: int):
+    def put(self, key: str, data: Any, *dependencies: DependencyBase, expires: Union[int, timedelta]):
         """ Store data into the cache under key `key`
 
         Args:
             key: The cache key
             data: The data to store. It has to be json-serializable.
             *dependencies: List of dependencies for this cache entry. See `matroska_cache.dep`.
-            expires: The number of seconds to keep this cache entry for
+            expires: The number of seconds to keep this cache entry for, or a `timedelta` object
         """
+        if isinstance(expires, timedelta):
+            expires = int(expires.total_seconds())
         return self.backend.put(key, data, expires=expires, dependencies=dependencies)
 
     def delete(self, key: str):
