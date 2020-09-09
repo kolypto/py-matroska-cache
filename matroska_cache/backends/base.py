@@ -34,7 +34,7 @@ Example invalidate:
 from abc import ABC, abstractmethod
 from typing import Any, Iterable
 
-from matroska_cache.dependency.base import DependencyBase
+from matroska_cache.dep.base import DependencyBase
 from matroska_cache.exc import NotInCache  # noqa
 
 

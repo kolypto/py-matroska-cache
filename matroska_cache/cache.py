@@ -50,7 +50,7 @@ Example:
 from typing import Any
 
 from .backends.base import MatroskaCacheBackendBase
-from .dependency.base import DependencyBase
+from .dep.base import DependencyBase
 from .exc import NotInCache  # noqa
 
 

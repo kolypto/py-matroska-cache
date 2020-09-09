@@ -5,7 +5,7 @@ from sqlalchemy.orm.base import instance_state
 from sqlalchemy.orm.relationships import RelationshipProperty
 from sqlalchemy.orm.state import InstanceState
 
-from matroska_cache.dependency import PrimaryKey
+from matroska_cache.dep import PrimaryKey
 
 SAInstanceT = TypeVar('SAInstanceT', bound=object)
 
