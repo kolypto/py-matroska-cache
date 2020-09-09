@@ -7,9 +7,6 @@ class NTag(Tag):
 
     Use it in a large application to have more control over prefixes
     """
-    name: str
-    __slots__ = 'name',
-
     PREFIX = ...
 
     def __init_subclass__(cls):

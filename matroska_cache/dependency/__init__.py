@@ -2,6 +2,7 @@
 
 from .id import Id
 from .tag import Tag
+from .ntag import NTag
 from .scopes import Scopes
 
 try:
