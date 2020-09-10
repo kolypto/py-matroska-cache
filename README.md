@@ -145,7 +145,7 @@ Note that because a scope has already been declared and described, you don't hav
 You just give an object to the scope, and that's it. 
 
 ```python
-from matroska_cache import sa_modified_names
+from matroska_cache import dep, sa_modified_names
 
 # NOTE: consider using SqlAlchemy Session events for this.
 
@@ -163,6 +163,11 @@ def modify_article():
     # sa_modified_names() helps you with that.
     # Why is that important? Because some changes are relevant (published, category) while others are not.
     article_scopes.invalidate_for(article, cache, sa_modified_names(article)
+
+    # Also don't forget to invalidate by PrimaryKey
+    cache.invalidate(
+        dep.PrimaryKey.from_instance(article)
+    )
 ```
 
 Finally, when you have a scope declared, described, and bound to your CRUD, use it as a dependency:
