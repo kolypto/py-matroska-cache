@@ -34,7 +34,7 @@ class RedisBackend(MatroskaCacheBackendBase):
         return self.redis.exists(self._key('data', key)) == 1
 
     def delete(self, key: str):
-        self.redis.delete(self._key('data', key))
+        self.redis.unlink(self._key('data', key))
 
     def put(self, key: str, data: Any, dependencies: Iterable[DependencyBase], expires: int):
         # Store the dependency information
@@ -61,7 +61,7 @@ class RedisBackend(MatroskaCacheBackendBase):
         # Invalidate every data key that depend on these rdep_keys
         # This means deleting them
         if data_keys:  # do nothing if there is nothing to do
-            self.redis.delete(*(self._key('data', key) for key in data_keys))
+            self.redis.unlink(*(self._key('data', key) for key in data_keys))
 
     def _remember_dependencies_for(self, key: str, dependencies: Iterable[DependencyBase], expires: int):
         """ Update dependency information for `key`
