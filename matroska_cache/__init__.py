@@ -6,6 +6,6 @@ from .exc import NotInCache
 from . import dep
 
 try:
-    from .sa_dependencies import sa_dependencies
+    from .sa_tools import sa_dependencies, sa_modified_names
 except ImportError:
     pass

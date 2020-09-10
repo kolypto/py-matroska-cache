@@ -1,5 +1,5 @@
 import itertools
-from typing import TypeVar, Mapping, Union, Iterable, List
+from typing import TypeVar, Mapping, Union, Iterable, List, Set
 
 from sqlalchemy.orm.base import instance_state
 from sqlalchemy.orm.relationships import RelationshipProperty
@@ -61,3 +61,15 @@ def sa_dependencies(instance: Union[SAInstanceT, Iterable[SAInstanceT]], map: Pl
             ret.extend(sa_dependencies(getattr(instance, key), include, _seen))
 
     return ret
+
+
+def sa_modified_names(instance: object) -> Set[str]:
+    """ Get the set of modified attribute names
+
+    Note: you can only use it before flush(), because then all changes
+    are persisted and the information about them is lost.
+    """
+    # `committed_state` is the dict of the original, unchanged, attribute names.
+    # `dict` contains current values, and when those are modified, old values go into `committed_state`.
+    # Therefore, `set(committed_state)` is what we want.
+    return set(instance_state(instance).committed_state)
