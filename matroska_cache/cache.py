@@ -105,5 +105,6 @@ class MatroskaCache:
     log_enabled: bool = False
 
     def set_logging_enabled(self, enabled: bool):
+        """ Buff: +7 to your debugging skills """
         self.log_enabled = enabled
         self.backend.log_enabled = enabled
