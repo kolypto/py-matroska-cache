@@ -173,6 +173,24 @@ def test_collection_dependencies(redis: FakeRedis):
         assert list_scifi_books() == (True, expected_scifi)
 
 
+        # In the end, see what's in that Redis database
+        keys = redis.keys('*')
+        assert set(keys) == {
+            # The cached data
+            'cache::data::books-sci-fi',
+            # ids (rdep)
+            'cache::rdep::id:book:1',
+            'cache::rdep::id:book:2',
+            # scopes (rdep)
+            'cache::rdep::condition:book:&category=sci-fi&',
+            'cache::rdep::condition:book::InvalidateAll',
+        }
+
+        # Make sure they're all going to expire
+        for key in keys:
+            ttl = redis.ttl(key)
+            assert ttl > 0, f'Key {key!r} has no TTL'
+
 
     # Some imaginary books database
     books_db: MutableMapping[str, dict] = {}

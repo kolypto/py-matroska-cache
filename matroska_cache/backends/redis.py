@@ -82,11 +82,13 @@ class RedisBackend(MatroskaCacheBackendBase):
         p = self.redis.pipeline()
 
         # # Forward dependency information: `data` depends on `dep`
+        # # Format: <data-key> = { dependency, ... }
         # NOTE: this information might only be useful for debugging
         # fdep_key = self._key('fdep', key)
         # p.sadd(fdep_key, *deps)
 
         # Reverse dependency information: `dep` is a dependency of `data`
+        # Format: <dependency> = {<data-key>, ...}
         rdep_keys = []
         for dep in deps:
             rdep_key = self._key('rdep', dep)
@@ -106,7 +108,7 @@ class RedisBackend(MatroskaCacheBackendBase):
         dep_keys_expire = [max(ttl, expires) for ttl in dep_keys_ttls]
 
         # Update TTLs for dep keys
-        for key, key_expires in zip(key, dep_keys_expire):
+        for key, key_expires in zip(dep_keys, dep_keys_expire):
             p.expire(key, key_expires)
         p.execute()
 

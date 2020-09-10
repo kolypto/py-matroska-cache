@@ -328,4 +328,4 @@ class InvalidateAll(Tag):
     PREFIX = ConditionalDependency.PREFIX
 
     def __init__(self, object_type: str):
-        super().__init__(f'{object_type}')
+        super().__init__(f'{object_type}::InvalidateAll')
