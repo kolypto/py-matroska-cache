@@ -46,12 +46,15 @@ Example:
 
     cache.put('articles-list', jsonify(data), *dependencies, expires=60)
 """
+import logging
 from datetime import timedelta
 from typing import Any, Union
 
 from .backends.base import MatroskaCacheBackendBase
 from .dep.base import DependencyBase
 from .exc import NotInCache  # noqa
+
+logger = logging.getLogger(__name__)
 
 
 class MatroskaCache:
@@ -83,6 +86,7 @@ class MatroskaCache:
         """
         if isinstance(expires, timedelta):
             expires = int(expires.total_seconds())
+        self.log_enabled and logger.info('put(): ' + ", ".join(str(dep) for dep in dependencies))
         return self.backend.put(key, data, expires=expires, dependencies=dependencies)
 
     def delete(self, key: str):
@@ -95,4 +99,11 @@ class MatroskaCache:
         Args:
             *dependencies: List of dependencies to invalidate cache records for
         """
+        self.log_enabled and logger.info('invalidate(): ' + ", ".join(str(dep) for dep in dependencies))
         return self.backend.invalidate(dependencies)
+
+    log_enabled: bool = False
+
+    def set_logging_enabled(self, enabled: bool):
+        self.log_enabled = enabled
+        self.backend.log_enabled = enabled

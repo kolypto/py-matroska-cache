@@ -1,10 +1,13 @@
 import itertools
 import json
+import logging
 from typing import Any, Iterable, List
 
 from redis import Redis
 
 from .base import MatroskaCacheBackendBase, DependencyBase, NotInCache
+
+logger = logging.getLogger(__name__)
 
 
 class RedisBackend(MatroskaCacheBackendBase):
@@ -52,6 +55,8 @@ class RedisBackend(MatroskaCacheBackendBase):
         for rdep_key in rdep_keys:
             p.smembers(rdep_key)
         data_keys = list(itertools.chain(*p.execute()))
+
+        self.log_enabled and logger.info('Invalidating data keys: ' + ' ; '.join(data_keys))
 
         # Invalidate every data key that depend on these rdep_keys
         # This means deleting them

@@ -39,6 +39,8 @@ from matroska_cache.exc import NotInCache  # noqa
 
 
 class MatroskaCacheBackendBase(ABC):
+    log_enabled: bool = False
+
     @abstractmethod
     def put(self, data: Any, key: str, *, expires: int, dependencies: Iterable[DependencyBase]):
         """ Put `data` into cache, keyed by `key`, depending on `dependencies`
