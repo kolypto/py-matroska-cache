@@ -143,7 +143,7 @@ def test_collection_dependencies(redis: FakeRedis):
         assert list_scifi_books() == (True, expected_scifi)  # cache hit
 
         # Add a book.
-        add_other_book(category='fantasy')
+        add_other_book(category='fantasy', title='Swords & Magic')  # id: 1
         assert list_scifi_books() == (True, expected_scifi)  # cache is still hit: this category is not cached
 
         # Add a Sci-Fi book
@@ -163,6 +163,15 @@ def test_collection_dependencies(redis: FakeRedis):
         add_other_book(category='tutorials')
         modify_book(3, title='Easy Gardening')
         assert list_scifi_books() == (True, expected_scifi)  # cache was NOT invalidated when other books were modified
+
+        # Modify a non-sci-fi book and make it sci-fi
+        # This case is special because an object comes into scope not by creation, but by modification.
+        # PrimaryKey() will not invalidate the cache because the item was not in scope.
+        modify_book(1, category='sci-fi')
+        expected_scifi.insert(0, {'id': 1, 'category': 'sci-fi', 'title': 'Swords & Magic'})
+        assert list_scifi_books() == (False, expected_scifi)  # cache was invalidated by a book that has entered the scope
+        assert list_scifi_books() == (True, expected_scifi)
+
 
 
     # Some imaginary books database
@@ -222,6 +231,7 @@ def test_collection_dependencies(redis: FakeRedis):
 
         # 🪆 Invalidate caches: modified book
         cache.invalidate(dep.Id('book', id))
+        book_scopes.invalidate_for(book, cache, modified=set(fields))
 
     main()
 

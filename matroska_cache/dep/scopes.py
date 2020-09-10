@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, List, Callable, MutableMapping, Tuple, Union
+from typing import Any, List, Callable, Tuple, Union, Collection, FrozenSet, Optional, Iterable, Set
 
 from .base import DependencyBase, dataclass
 from .tag import Tag
 
-ExtractorFunc = Callable[[Any], dict]
+
+ExtractorFunc = Callable[[Any], Optional[dict]]
 
 
 class Scopes:
@@ -93,7 +94,8 @@ class Scopes:
                 In development (production_mode=False), an exception will be raised.
         """
         self._object_type = object_type
-        self._extractor_fns: MutableMapping[Tuple[str], ExtractorFunc] = {}
+        self._extractor_fns: List[ExtractorInfo] = []
+        self._known_extractor_signatures: Set[Tuple[str]] = set()
 
         # An invalidate-all dependency used to invalidate all caches in cases when scopes are not used properly.
         # For instance, the user is attempting to cache the results that matched a filter
@@ -102,11 +104,13 @@ class Scopes:
         self._invalidate_all = InvalidateAll(self._object_type)
         self._production_mode = production_mode
 
-    def describes(self, *param_names):
+    def describes(self, *param_names, watch_modified: Optional[Iterable[str]] = None):
         """ Decorator for a function that extracts data for a conditional dependency.
 
-        Whenever a new object is created, your application should call `invalidate_for()`,
-        and it will invalidate every cache that depends on any filtered list of such objects.
+        NOTE: let your function return `None` if you want a particular change to be ignored for some reason.
+
+        Whenever any object is saved, your application should call `invalidate_for()`,
+        and it will invalidate every cache that might see a new object enter the scope, or an old one leave it.
 
         The arguments for the scope are described by the decorated function: if you want to cache the results of
         a list filtered by `category=<something>`, you first need to define an extractor function:
@@ -132,31 +136,39 @@ class Scopes:
         Args:
             *param_names: The list of parameter names the extractor function is going to return.
                 These names are completely custom, but have to match those given to condition()
+            watch_modified: Only run this function when the following fields are modified.
+                Default: equal to `parameter_names`.
+                Setting this field manually only makes sense when your parameter names are different from attribute names.
+                For example:
+                    return {'filter-by-category': article.category}
         """
         def decorator(fn: ExtractorFunc):
             """ Register the decorated function and return """
-            # Remember the extractor function and the parameters it returns
-            filter_params_signature = tuple(sorted(param_names))
-            assert filter_params_signature not in self._extractor_fns, (
-                f'An extractor with filter parameters {filter_params_signature!r} is already described'
+            self._extractor_fns.append(
+                ExtractorInfo(
+                    param_names=frozenset(param_names),
+                    watch_modified=frozenset(watch_modified) if watch_modified else frozenset(param_names),
+                    func=fn
+                )
             )
-            self._extractor_fns[filter_params_signature] = fn
+            self._known_extractor_signatures.add(tuple(sorted(param_names)))
 
             # Done
             return fn
         return decorator
 
-    def invalidate_for(self, item: Any, cache: 'MatroskaCache', **info):
+    def invalidate_for(self, item: Any, cache: 'MatroskaCache', modified: Collection[str] = None, **info):
         """ Invalidate all caches that may see `item` in their listings.
 
         Args:
             item: The new/deleted item that may enter or leave the scope of some listing
             cache: MatroskaCache to invalidate
+            modified: (optional) list of field names that have been modified. Useful to ignore non-relevant updates.
             **info: Extra info that may be passed to your extractor functions
         """
-        cache.invalidate(*self.object_invalidates(item, **info))
+        cache.invalidate(*self.object_invalidates(item, modified, **info))
 
-    def condition(self, **conditions: Any) -> List[ConditionalDependency]:
+    def condition(self, **conditions: Any) -> List[Union[ConditionalDependency, InvalidateAll]]:
         """ Get dependencies for a conditional scope.
 
         Use this method with MatroskaCache.put() to generate dependencies for your scope.
@@ -170,14 +182,14 @@ class Scopes:
         # Signature
         filter_params_signature = tuple(sorted(conditions))
 
-        if filter_params_signature in self._extractor_fns:
+        if filter_params_signature in self._known_extractor_signatures:
             return [
                 ConditionalDependency(self._object_type, conditions),
                 # Got to declare this kill switch as a dependency; otherwise, it won't work.
                 self._invalidate_all,
             ]
         elif self._production_mode:
-            warnings.want(
+            warnings.warn(
                 f'Matroska cache: no extractor @describes for {filter_params_signature!r}. '
                 f'Caching disabled. '
             )
@@ -189,7 +201,7 @@ class Scopes:
                 f'It will not fail in production, but caching will be disabled.'
             )
 
-    def object_invalidates(self, item: Any, **info) -> List[Union[ConditionalDependency, InvalidateAll]]:
+    def object_invalidates(self, item: Any, modified: Collection[str] = None, **info) -> List[Union[ConditionalDependency, InvalidateAll]]:
         """ Get dependencies that will invalidate all caches that may see `item` in their listings.
 
         This function takes the `item` and calls every extractor function decorated by `@scope.describes()`.
@@ -197,16 +209,26 @@ class Scopes:
 
         Args:
             item: The newly created or freshly deleted item.
+            modified: (optional) list of field names that have been modified. Useful to ignore non-relevant updates.
+                If not provided, all extractor functions will be run to invalidate dependencies.
+                If provided, only those that are watching those attributes will be run.
             **info: Additional arguments to pass to *all* the extractor functions.
 
         Returns:
             List of dependencies to be used with `cache.invalidate()`
         """
+        if modified:
+            modified = set(modified)
+
         ret = []
-        for param_names, extractor_fn in self._extractor_fns.items():
-            # Run the extractor function
+        for extractor_info in self._extractor_fns:
+            # if `modified` was provided, skip extractors that are not interested in those fields
+            if modified and not (extractor_info.watch_modified & modified):
+                continue
+
+            # Run the extractor function and get dependency parameters
             try:
-                params = extractor_fn(item, **info)
+                params = extractor_info.func(item, **info)
             except Exception:
                 # In production mode, just invalidate all
                 if self._production_mode:
@@ -215,8 +237,11 @@ class Scopes:
                 else:
                     raise
 
+            # If the function returned a None, skip it altogether
+            if params is None:
+                continue
             # If it returned a correct set of fields (as @describes()ed), generate a dependency
-            if set(params) == set(param_names):
+            elif set(params) == extractor_info.param_names:
                 ret.append(ConditionalDependency(self._object_type, params))
             # In production mode, just invalidate all
             elif self._production_mode:
@@ -224,7 +249,7 @@ class Scopes:
             # In development mode, report an error
             else:
                 raise RuntimeError(
-                    f'The described extractor {extractor_fn} was supposed to return a dict of {param_names!r}, '
+                    f'The described extractor {extractor_info.func} was supposed to return a dict of {extractor_info.param_names!r}, '
                     f'but it returned only {params!r}. Please fix. '
                     f'It will not fail in production, but caching will be disabled.'
                 )
@@ -277,6 +302,22 @@ class ConditionalDependency(DependencyBase):
 
     def key(self) -> str:
         return f'{self.PREFIX}:{self.object_type}:{self.condition}'
+
+
+@dataclass
+class ExtractorInfo:
+    # Set of parameters that the extractor function promises to return
+    param_names: FrozenSet[str]
+
+    # Set of parameters that it watches the modifications on.
+    # Default: equal to param_names_set
+    watch_modified: FrozenSet[str]
+
+    # The extractor function itself
+    func: ExtractorFunc
+
+    __slots__ = 'param_names', 'watch_modified', 'func'
+
 
 
 class InvalidateAll(Tag):
