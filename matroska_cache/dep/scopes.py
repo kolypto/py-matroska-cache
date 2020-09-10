@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, List, Callable, MutableMapping, Tuple
+from typing import Any, List, Callable, MutableMapping, Tuple, Union
 
 from .base import DependencyBase, dataclass
 from .tag import Tag
@@ -43,7 +43,7 @@ class Scopes:
             articles,
             ...
             # ... declare this category as their dependency
-            article_scopes.condition(category='python')
+            *article_scopes.condition(category='python')
         )
 
     Now, in another place, where articles are created, you can invalidate this dependency automatically
@@ -189,7 +189,7 @@ class Scopes:
                 f'It will not fail in production, but caching will be disabled.'
             )
 
-    def object_invalidates(self, item: Any, **info) -> List[ConditionalDependency]:
+    def object_invalidates(self, item: Any, **info) -> List[Union[ConditionalDependency, InvalidateAll]]:
         """ Get dependencies that will invalidate all caches that may see `item` in their listings.
 
         This function takes the `item` and calls every extractor function decorated by `@scope.describes()`.
@@ -204,11 +204,24 @@ class Scopes:
         """
         ret = []
         for param_names, extractor_fn in self._extractor_fns.items():
-            params = extractor_fn(item, **info)
+            # Run the extractor function
+            try:
+                params = extractor_fn(item, **info)
+            except Exception:
+                # In production mode, just invalidate all
+                if self._production_mode:
+                    return [self._invalidate_all]
+                # In development mode, report the error
+                else:
+                    raise
+
+            # If it returned a correct set of fields (as @describes()ed), generate a dependency
             if set(params) == set(param_names):
                 ret.append(ConditionalDependency(self._object_type, params))
+            # In production mode, just invalidate all
             elif self._production_mode:
-                ret.append(self._invalidate_all)
+                return [self._invalidate_all]
+            # In development mode, report an error
             else:
                 raise RuntimeError(
                     f'The described extractor {extractor_fn} was supposed to return a dict of {param_names!r}, '
