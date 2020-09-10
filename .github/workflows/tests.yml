@@ -4,9 +4,9 @@ on:
   pull_request:
     types: [ opened, edited, reopened ]
   release:
-    types: [ prereleased , released ]
+    types: [ prereleased, released ]
   push:
-    branches: [ master ]
+    branches: [ master, development ]
   # Trigger this workflow manually from the `actions` page
   workflow_dispatch:
     inputs:
