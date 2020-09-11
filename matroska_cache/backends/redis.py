@@ -171,5 +171,28 @@ class RedisBackend(MatroskaCacheBackendBase):
         return f'{self.prefix}::{type}::{name}'
 
 
-serialize = json.dumps
-unserialize = json.loads
+def serialize(data: Any):
+    """ Serialize strings and objects efficiently
+
+    String: returned as is, with 's' as a prefix
+    Json: serialized, using 'j' as the prefix
+
+    With plain strings, this is 14x faster
+    """
+    if isinstance(data, str):
+        return DATA_STRING + data
+    else:
+        return DATA_JSON + json.dumps(data)
+
+
+def unserialize(data: Any):
+    format, data = data[0], data[1:]
+    if format == DATA_STRING:
+        return data
+    elif format == DATA_JSON:
+        return json.loads(data)
+
+
+# Prefixes for data formats
+DATA_STRING = 's'
+DATA_JSON = 'j'
