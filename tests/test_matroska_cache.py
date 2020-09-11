@@ -187,9 +187,9 @@ def test_collection_dependencies(redis: FakeRedis):
         }
 
         # Make sure they're all going to expire
-        for key in keys:
-            ttl = redis.ttl(key)
-            assert ttl > 0, f'Key {key!r} has no TTL'
+        keys_with_ttls = {key: redis.ttl(key) for key in keys}
+        all_keys_have_expiration = all(ttl>0 for ttl in keys_with_ttls.values())
+        assert all_keys_have_expiration, f'Some keys do not have TTLs set: {keys_with_ttls!r}'
 
 
     # Some imaginary books database

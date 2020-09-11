@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Any, Iterable, List
 
-from redis import Redis
+from redis import Redis, WatchError
 
 from .base import MatroskaCacheBackendBase, DependencyBase, NotInCache
 
@@ -37,33 +37,57 @@ class RedisBackend(MatroskaCacheBackendBase):
         self.redis.unlink(self._key('data', key))
 
     def put(self, key: str, data: Any, dependencies: Iterable[DependencyBase], expires: int):
+        data_key = self._key('data', key)
+
         # Store the dependency information
-        self._remember_dependencies_for(key, dependencies, expires)
+        self._remember_dependencies_for(data_key, dependencies, expires)
 
         # Store the data
-        self.redis.setex(self._key('data', key), expires, serialize(data))
+        self.redis.setex(data_key, expires, serialize(data))
 
     def invalidate(self, dependencies: Iterable[DependencyBase]):
         if not dependencies:
             return
 
         # Get the list of keys that depend on `dependency` (every single one of them)
-        # This is resolved through the `rdep` key
-        rdep_keys = [self._key('rdep', dependency.key())
-                     for dependency in dependencies]
-        p = self.redis.pipeline()
-        for rdep_key in rdep_keys:
-            p.smembers(rdep_key)
-        data_keys = list(itertools.chain(*p.execute()))
+        # Use a set to ensure their uniqueness
+        deps = {self._key('rdep', dependency.key())
+                for dependency in dependencies}
 
-        self.log_enabled and logger.info('Invalidating data keys: ' + ' ; '.join(data_keys))
+        # Atomically, in a transaction
+        with self.redis.pipeline() as t:
+            # It's scary to do `while True`, so we only try 10 times
+            for _ in range(0, 10):
+                try:
+                    # Fail the transaction if any of those keys gets changed
+                    t.watch(*deps)
 
-        # Invalidate every data key that depend on these rdep_keys
-        # This means deleting them
-        if data_keys:  # do nothing if there is nothing to do
-            self.redis.unlink(*(self._key('data', key) for key in data_keys))
+                    # Get the data keys to invalidate
+                    # To get the data keys, we load every reverse-dependency key
+                    with t.pipeline(transaction=False) as p:
+                        for rdep_key in deps:
+                            p.smembers(rdep_key)
+                        data_keys = list(itertools.chain(*p.execute()))
 
-    def _remember_dependencies_for(self, key: str, dependencies: Iterable[DependencyBase], expires: int):
+                    # Invalidate those data keys
+                    # Invalidate dependency keys as well. Otherwise they may accumulate lots of dead data keys
+                    if data_keys:
+                        # Also watch the data keys we've just obtained
+                        t.watch(*data_keys)
+
+                        # Atomically delete everything
+                        t.multi()
+                        t.unlink(*data_keys, *deps)
+                        t.execute()
+
+                    # Great success!
+                    self.log_enabled and logger.info('Invalidated data keys: ' + ' ; '.join(data_keys))
+                    break
+                except WatchError:
+                    # Conflict. Retry.
+                    continue
+
+    def _remember_dependencies_for(self, data_key: str, dependencies: Iterable[DependencyBase], expires: int):
         """ Update dependency information for `key`
 
         This method stores two keys:
@@ -73,44 +97,67 @@ class RedisBackend(MatroskaCacheBackendBase):
         After storing those, it updates the expiration time on every dependency key:
         sets it to `expires`, but makes sure that the resulting TTL is not getting shorter
         """
-        # Dependencies as a string
-        deps = [dependency.key() for dependency in dependencies]
+        # Dependencies as a string with "rdep::" prefix
+        # Use a set to ensure their uniqueness
+        deps = {self._key('rdep', dependency.key())
+                for dependency in dependencies}
         if not deps:
             return
 
-        # Use a pipeline to speed up
-        p = self.redis.pipeline()
+        # 1. Store reverse dependency information: `dep` is a depencency of `data`
+        #    Format: "rdep:<dependency>" = set(<data-key>, ...)
+        # 2. Extend the expiration time of these keys
+        #    Because many data keys may share dependencies, we can never cut the expiration time short;
+        #    we can only prolong it.
+        #
+        # So, in Redis terms:
+        # for every dependency `dep` in `deps`:
+        #   SADD <dep> <key>
+        #   TTL <dep>
+        #   if <expires> greater than <ttl>:
+        #       EXPIRE <dep> <expires>
 
-        # # Forward dependency information: `data` depends on `dep`
-        # # Format: <data-key> = { dependency, ... }
-        # NOTE: this information might only be useful for debugging
-        # fdep_key = self._key('fdep', key)
-        # p.sadd(fdep_key, *deps)
-
-        # Reverse dependency information: `dep` is a dependency of `data`
-        # Format: <dependency> = {<data-key>, ...}
-        rdep_keys = []
+        # Add `data_key` as a reverse dependency of every `deps`
+        # We'll use a pipeline to speed things up. We don't need a transaction here, because we want this data to be saved anyway
+        p = self.redis.pipeline(transaction=False)
         for dep in deps:
-            rdep_key = self._key('rdep', dep)
-            rdep_keys.append(rdep_key)
-            p.sadd(rdep_key, key)
-
-        # Commit
+            p.sadd(dep, data_key)
         p.execute()
 
-        # Get the current TTLs for dependency keys
-        dep_keys = rdep_keys  #[fdep_key, *rdep_keys]
-        for key in dep_keys:
-            p.ttl(key)
-        dep_keys_ttls: List[int] = p.execute()
+        # Extend the TTLs
+        # Use a transaction becase we have to (read, update, write) atomically
+        with self.redis.pipeline() as t:
+            for _ in range(0, 10):
+                try:
+                    # Fail the transaction if any of those keys gets changed
+                    t.watch(*deps)
 
-        # Prolong every TTL if `expires` is beyond that.
-        dep_keys_expire = [max(ttl, expires) for ttl in dep_keys_ttls]
+                    # Get all TTLs at once
+                    with t.pipeline(transaction=False) as p:
+                        for dep in deps:
+                            p.ttl(dep)
+                        dep_ttls: List[int] = p.execute()
 
-        # Update TTLs for dep keys
-        for key, key_expires in zip(dep_keys, dep_keys_expire):
-            p.expire(key, key_expires)
-        p.execute()
+                    # Only update keys that have a TTL shorter than this.
+                    # This makes sure that we only prolong TTLs, never cut them short
+                    expire_deps = [
+                        dep
+                        for dep, dep_ttl in zip(deps, dep_ttls)
+                        if dep_ttl < expires
+                    ]
+
+                    # Atomically update them all.
+                    # Note that we're still under WATCH ;)
+                    t.multi()
+                    for dep in expire_deps:
+                        t.expire(dep, expires)
+                    t.execute()
+
+                    # Great success!
+                    break
+                except WatchError:
+                    # Conflict. Retry.
+                    continue
 
     def _key(self, type: str, name: str):
         """ Make a Redis key name
