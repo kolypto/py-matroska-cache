@@ -52,10 +52,38 @@ class Scopes:
 
         def create_new_article(...):
             ...
-            article_scopes.invalidate_for(article, invalidate_for)
+            article_scopes.invalidate_for(article, cache)
 
     Under the hood, it will go over every condition known through @article_scopes.describes()
     and invalidate all related caches.
+
+    Now, the object would leave the scope when it's modified or removed.
+    Normally, you can have this sort of tracking by id:
+
+        cache.invalidate(dep.Id('book', id))
+
+    because the Scopes handler won't know the old value of the field, and therefore, won't know which scopes to invalidate.
+    If you want scopes to handle both entering & leaving, you'll have to feed both the old and the new
+    versions of the object into `article_scopes.invalidate_for()`
+
+
+        def update_existing_article(...):
+            ...
+            previous_version_of_article = ...
+
+            article_scopes.invalidate_for(previous_version_of_article, cache)
+            article_scopes.invalidate_for(current_version_of_article, cache)
+
+
+        def delete_existing_article(...):
+            ...
+            article_scopes.invalidate_for(article, cache)
+
+    Why?
+    Because when your book's category changes from "documentary" to "fiction", Scopes actually needs to invalidate *both* scopes:
+
+    * The "category=documentary" scope, from which the book has quit
+    * The "category=fiction" scope, which the book has entered
 
     ---
 

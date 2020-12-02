@@ -123,10 +123,9 @@ def test_collection_dependencies(redis: FakeRedis):
 
     book_scopes = dep.Scopes('book', production_mode=False)
 
-    @book_scopes.describes('category')
+    @book_scopes.describes('category', 'published')
     def book_category(book: dict):
-        return {'category': book['category']}
-
+        return {'category': book['category'], 'published': book['published']}
 
     def main():
         # Test that cache is invalidated when:
@@ -148,7 +147,7 @@ def test_collection_dependencies(redis: FakeRedis):
 
         # Add a Sci-Fi book
         add_scifi_book()
-        expected_book = {'id': 2, 'category': 'sci-fi'}
+        expected_book = {'id': 2, 'category': 'sci-fi', 'published': True}
         expected_scifi.append(expected_book)
         assert list_scifi_books() == (False, expected_scifi)  # cache was invalidated by a new book
         assert list_scifi_books() == (True, expected_scifi)
@@ -168,7 +167,7 @@ def test_collection_dependencies(redis: FakeRedis):
         # This case is special because an object comes into scope not by creation, but by modification.
         # PrimaryKey() will not invalidate the cache because the item was not in scope.
         modify_book(1, category='sci-fi')
-        expected_scifi.insert(0, {'id': 1, 'category': 'sci-fi', 'title': 'Swords & Magic'})
+        expected_scifi.insert(0, {'id': 1, 'category': 'sci-fi', 'published': True, 'title': 'Swords & Magic'})
         assert list_scifi_books() == (False, expected_scifi)  # cache was invalidated by a book that has entered the scope
         assert list_scifi_books() == (True, expected_scifi)
 
@@ -177,12 +176,12 @@ def test_collection_dependencies(redis: FakeRedis):
         keys = redis.keys('*')
         assert set(keys) == {
             # The cached data
-            'cache::data::books-sci-fi',
+            'cache::data::books-sci-fi--published=True',
             # ids (rdep)
             'cache::rdep::id:book:1',
             'cache::rdep::id:book:2',
             # scopes (rdep)
-            'cache::rdep::condition:book:&category=sci-fi&',
+            'cache::rdep::condition:book:&category=sci-fi&published=True&',
             'cache::rdep::condition:book::InvalidateAll',
         }
 
@@ -192,13 +191,47 @@ def test_collection_dependencies(redis: FakeRedis):
         assert all_keys_have_expiration, f'Some keys do not have TTLs set: {keys_with_ttls!r}'
 
 
+
+
+
+
+
+
+
+        # === Test scopes
+        book = lambda category='sci-fi', published=True: {'category': category, 'published': published}
+
+        # We have a composite scope that depends both on "category" and "published"
+        # See if the modification of one parameter would invalidate the whole list
+        book_scopes.invalidate_for(book('sci-fi', True), cache, modified={'category'})
+
+        assert list_scifi_books() == (False, expected_scifi)  # cache invalidated by a change to 'category'
+        assert list_scifi_books() == (True, expected_scifi)
+
+        # The book is unpublished
+        # We need to invalidate twice
+        book_scopes.invalidate_for(book('sci-fi', True), cache, modified={'published'})
+        book_scopes.invalidate_for(book('sci-fi', False), cache, modified={'published'})
+
+        assert list_scifi_books() == (False, expected_scifi)  # cache invalidated by a change to 'published'
+        assert list_scifi_books() == (True, expected_scifi)
+
+        # The book's genre is modified
+        # We need to invalidate twice
+        book_scopes.invalidate_for(book('sci-fi', True), cache, modified={'category'})
+        book_scopes.invalidate_for(book('fantasy', True), cache, modified={'category'})
+
+        assert list_scifi_books() == (False, expected_scifi)  # cache invalidated by a change to 'category'
+        assert list_scifi_books() == (True, expected_scifi)
+
+
     # Some imaginary books database
     books_db: MutableMapping[str, dict] = {}
 
-    def list_scifi_books(category='sci-fi'):
-        return list_books(category)
+    def list_scifi_books(category='sci-fi', published=True):
+        return list_books(category, published)
 
-    def list_books(category: str):
+    def list_books(category: str, published: bool = True):
         """ List books from a category
 
         Returns:
@@ -206,29 +239,29 @@ def test_collection_dependencies(redis: FakeRedis):
         """
         # Attempt to get from cache
         try:
-            return True, cache.get('books-sci-fi')
+            return True, cache.get(f'books-{category}--published={published}')
         except NotInCache:
             # Query the database
             books = [book for book in books_db.values()
-                     if book['category'] == category]
+                     if book['category'] == category and book['published']]
 
             # 🪆 Cache, return
-            cache.put(f'books-{category}', books,
+            cache.put(f'books-{category}--published={published}', books,
                       # Every book is a dependency by id
                       *[dep.Id('book', book['id']) for book in books],
                       # The filtered list of books is itself a dependency.
                       # This condition() references a scope described using `@book_scopes.describes()`
                       # The resulting dependency is automatically invalidated using `book_scopes.object(book)`
-                      *book_scopes.condition(category=category),
+                      *book_scopes.condition(category=category, published=published),
                       expires=600,
                       )
             return False, books
 
-    def add_scifi_book(*, category='sci-fi', **fields):
-        return add_book({'category': category, **fields})
+    def add_scifi_book(*, category='sci-fi', published=True, **fields):
+        return add_book({'category': category, 'published': published, **fields})
 
-    def add_other_book(*, category: str, **fields):
-        return add_book({'category': category, **fields})
+    def add_other_book(*, category: str, published=True, **fields):
+        return add_book({'category': category, 'published': published, **fields})
 
     def add_book(book: dict):
         # Save the book
