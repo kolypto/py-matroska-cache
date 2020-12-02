@@ -48,7 +48,7 @@ Example:
 """
 import logging
 from datetime import timedelta
-from typing import Any, Union
+from typing import Any, Union, Iterable
 
 from .backends.base import MatroskaCacheBackendBase
 from .dep.base import DependencyBase
